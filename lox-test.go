@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -70,15 +72,6 @@ func initSuites() {
 			suites[javaSuite.name] = javaSuite
 		}
 	}
-	//err := filepath.Walk("tests/bool", func(path string, info os.FileInfo, err error) error {
-	//	if err == nil && !info.IsDir() {
-	//		tests = append(tests, path)
-	//	}
-	//	return nil
-	//})
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
 
 	//var cSuite = Suite{
 	//	executable: cInterpreter,
@@ -167,20 +160,44 @@ func (e *TestParseError) Error() string {
 }
 
 type Test struct {
-	path           string
-	expectedOutput []ExpectedOutput
-	expectedErrors []error
-	failures       []string
+	path                 string
+	expectedRuntimeError string
+	expectedExitCode     int
+	expectedOutput       []ExpectedOutput
+	expectedErrors       []error
+	failures             []string
 }
 
 func (t *Test) run() []string {
 	lox := exec.Command(suite.executable, "-jar", "C:\\Users\\willi\\Code\\lox\\out\\artifacts\\lox_jar\\lox.jar", t.path)
-	bytes, err := lox.Output()
-	if err != nil {
-		log.Panicln(err)
+
+	var stdout, stderr bytes.Buffer
+	lox.Stdout = &stdout
+	lox.Stderr = &stderr
+
+	err := lox.Run()
+	var exitCode = 0
+	if exitError, ok := err.(*exec.ExitError); ok {
+		// very fragile, error message is "Status Code X"
+		// It seems like go doesn't support returning exit codes?
+		s := strings.Split(exitError.Error(), " ")[2]
+		if s != "0" {
+			exitCode, err = strconv.Atoi(s)
+			if err != nil {
+				panic(err)
+			}
+		}
 	}
-	result := string(bytes)
-	outputLines := strings.Split(result, "\n")
+
+	outputLines := strings.Split(string(stdout.Bytes()), "\n")
+	errorLines := strings.Split(string(stderr.Bytes()), "\n")
+
+	if t.expectedRuntimeError != "" {
+		t.validateRuntimeError(errorLines)
+	} else {
+		t.validateCompileErrors(errorLines)
+	}
+	t.validateExitCode(exitCode, errorLines)
 	t.validateOutput(outputLines)
 	return t.failures
 }
@@ -261,4 +278,16 @@ func (t *Test) parse() error {
 	}
 
 	return nil
+}
+
+func (t *Test) validateExitCode(exitCode int, lines []string) {
+
+}
+
+func (*Test) validateRuntimeError(lines []string) {
+
+}
+
+func (t *Test) validateCompileErrors(lines []string) {
+
 }

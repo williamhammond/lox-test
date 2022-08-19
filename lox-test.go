@@ -8,32 +8,19 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
 
 const cInterpreter = "C:\\Users\\willi\\Code\\clox\\cmake-build-debug\\clox.exe"
-
-// const javaInterpreter = "java -jar C:\\Users\\willi\\Code\\lox\\out\\artifacts\\lox_jar\\lox.jar"
 const javaInterpreter = "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath\\java.exe"
-
-//expectedOutputPattern, err := regexp.Compile("// expect: ?(.*)")
-//expectedErrorPattern, err  := regexp.Compile("// (Error.*)")
-//errorLinePattern, err := regexp.Compile("// \[((java|c) )?line (\d+)\] (Error.*)")
-//expectedRuntimeErrorPattern, err := regexp.Compile("// expect runtime error: (.+)")
-//syntaxErrorPattern, err := regexp.Compile("\[.*line (\d+)\] (Error.+)")
-//stackTracePattern, err := regexp.Compile("\[line (\d+)\]")
-//nonTestPattern, err := regexp.Compile()r"// nontest")
 
 const Red = "\033[31m"
 const Reset = "\033[0m"
 const Green = "\033[32m"
 
 var suites = map[string]Suite{}
-
 var suite Suite
-
 var passed = 0
 var failed = 0
 
@@ -42,12 +29,11 @@ func main() {
 
 	var path = flag.String("interpreter", "", "Path to lox interpreter")
 	flag.Parse()
-	if _, err := os.Stat(*path); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(*path); *path != "" && errors.Is(err, os.ErrNotExist) {
 		log.Panicln(err)
 	}
 
 	keys := make([]string, len(suites))
-
 	i := 0
 	for k := range suites {
 		keys[i] = k
@@ -62,27 +48,43 @@ func main() {
 }
 
 func initSuites() {
-	var tests []string
-	err := filepath.Walk("tests/bool", func(path string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() {
-			tests = append(tests, path)
-		}
-		return nil
-	})
+	directories, err := os.ReadDir("tests/")
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
+	for _, directory := range directories {
+		var tests []string
+		if directory.IsDir() {
+			testFiles, err := os.ReadDir("tests/" + directory.Name())
+			if err != nil {
+				panic(err)
+			}
+			for _, testFile := range testFiles {
+				tests = append(tests, "tests/"+directory.Name()+"/"+testFile.Name())
+			}
+			var javaSuite = Suite{
+				name:       "java - " + directory.Name(),
+				executable: javaInterpreter,
+				tests:      tests,
+			}
+			suites[javaSuite.name] = javaSuite
+		}
+	}
+	//err := filepath.Walk("tests/bool", func(path string, info os.FileInfo, err error) error {
+	//	if err == nil && !info.IsDir() {
+	//		tests = append(tests, path)
+	//	}
+	//	return nil
+	//})
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+
 	//var cSuite = Suite{
 	//	executable: cInterpreter,
 	//	tests:      tests,
 	//}
 	//suites["c"] = cSuite
-
-	var javaSuite = Suite{
-		executable: javaInterpreter,
-		tests:      tests,
-	}
-	suites["java"] = javaSuite
 }
 
 func runSuites(names []string) bool {
@@ -145,6 +147,7 @@ func runTest(path string) {
 }
 
 type Suite struct {
+	name       string
 	executable string
 	args       []string
 	tests      []string
@@ -209,6 +212,12 @@ func (t *Test) fail(message string, lines []string) {
 	}
 }
 
+// expectedOutputPattern, err := regexp.Compile("// expect: ?(.*)")
+// expectedErrorPattern, err  := regexp.Compile("// (Error.*)")
+// errorLinePattern, err := regexp.Compile("// \[((java|c) )?line (\d+)\] (Error.*)")
+// expectedRuntimeErrorPattern, err := regexp.Compile("// expect runtime error: (.+)")
+// syntaxErrorPattern, err := regexp.Compile("\[.*line (\d+)\] (Error.+)")
+// stackTracePattern, err := regexp.Compile("\[line (\d+)\]")
 func (t *Test) parse() error {
 	file, err := os.Open(t.path)
 	if err != nil {

@@ -163,8 +163,10 @@ type Test struct {
 	path                 string
 	expectedRuntimeError string
 	expectedExitCode     int
+	runtimeErrorLine     int
+	expectations         int
 	expectedOutput       []ExpectedOutput
-	expectedErrors       []error
+	expectedErrors       []string
 	failures             []string
 }
 
@@ -234,7 +236,6 @@ func (t *Test) fail(message string, lines []string) {
 // errorLinePattern, err := regexp.Compile("// \[((java|c) )?line (\d+)\] (Error.*)")
 // expectedRuntimeErrorPattern, err := regexp.Compile("// expect runtime error: (.+)")
 // syntaxErrorPattern, err := regexp.Compile("\[.*line (\d+)\] (Error.+)")
-// stackTracePattern, err := regexp.Compile("\[line (\d+)\]")
 func (t *Test) parse() error {
 	file, err := os.Open(t.path)
 	if err != nil {
@@ -259,10 +260,7 @@ func (t *Test) parse() error {
 			return nil
 		}
 
-		expectedOutputPattern, err := regexp.Compile("// expect: ?(.*)")
-		if err != nil {
-			return &TestParseError{t.path}
-		}
+		expectedOutputPattern := regexp.MustCompile("// expect: ?(.*)")
 		match := expectedOutputPattern.FindStringSubmatch(line)
 		if len(match) > 0 {
 			expectedOutput := ExpectedOutput{
@@ -270,7 +268,34 @@ func (t *Test) parse() error {
 				output: match[1],
 			}
 			t.expectedOutput = append(t.expectedOutput, expectedOutput)
+			t.expectations++
+			continue
 		}
+
+		expectedErrorPattern := regexp.MustCompile("// (Error.*)")
+		match = expectedErrorPattern.FindStringSubmatch(line)
+		if len(match) > 0 {
+			expectedError := fmt.Sprintf("[%d] %s", lineNum, match[1])
+			t.expectedErrors = append(t.expectedErrors, expectedError)
+
+			t.expectedExitCode = 65
+			t.expectations++
+			continue
+		}
+
+		expectedRuntimeErrorPattern := regexp.MustCompile("// expect runtime error: (.+)")
+		match = expectedRuntimeErrorPattern.FindStringSubmatch(line)
+		if len(match) > 0 {
+			t.runtimeErrorLine = lineNum
+			t.expectedRuntimeError = match[1]
+			t.expectedExitCode = 70
+			t.expectations++
+		}
+
+		if len(t.expectedErrors) > 0 && t.expectedRuntimeError != "" {
+			return &TestParseError{t.path}
+		}
+
 		lineNum++
 	}
 	if err := scanner.Err(); err != nil {
@@ -281,13 +306,98 @@ func (t *Test) parse() error {
 }
 
 func (t *Test) validateExitCode(exitCode int, lines []string) {
+	if t.expectedExitCode == exitCode {
+		return
+	}
+
+	if len(lines) > 10 {
+		lines = lines[:10]
+		lines = append(lines, "(truncated...)")
+	}
+
+	t.fail("Expected return code $_expectedExitCode and got $exitCode. Stderr:", lines)
 
 }
 
-func (*Test) validateRuntimeError(lines []string) {
+func (t *Test) validateRuntimeError(lines []string) {
+	if len(lines) < 2 {
+		t.fail(fmt.Sprintf("Expected runtime error %s but got none", t.expectedRuntimeError), []string{})
+		return
+	}
 
+	if lines[0] != t.expectedRuntimeError {
+		t.fail(fmt.Sprintf("Expected runtime error %s and got:", t.expectedRuntimeError), []string{})
+		t.fail(lines[0], []string{})
+	}
+
+	var stackLines = lines[1:]
+	stackTracePattern := regexp.MustCompile("[line (d+)]")
+
+	var foundStackTrace = false
+	for _, line := range stackLines {
+		match := stackTracePattern.MatchString(line)
+		if match {
+			foundStackTrace = true
+			break
+		}
+	}
+
+	if !foundStackTrace {
+		t.fail(fmt.Sprintf("Expected stack trace and got: "), lines)
+	} else {
+	}
 }
 
 func (t *Test) validateCompileErrors(lines []string) {
+	foundErrors := []string{}
+	unexpectedCount := 0
+	syntaxErrorPattern := regexp.MustCompile("[.*line (d+)] (Error.+)")
+	for _, line := range lines {
+		match := syntaxErrorPattern.FindStringSubmatch(line)
+		if len(match) > 0 {
+			error := fmt.Sprintf("[%s] %s", match[1], match[2])
+			containsError := false
+			for _, expectedError := range t.expectedErrors {
+				if expectedError == error {
+					containsError = true
+				}
+			}
+			if containsError {
+				foundErrors = append(foundErrors, error)
+			} else {
+				if unexpectedCount < 10 {
+					t.fail("Unexpected output on std err", []string{})
+					t.fail(line, []string{})
+				}
+				unexpectedCount++
+			}
+		} else if line != "" {
+			if unexpectedCount < 10 {
+				t.fail("Unexpected output on std err", []string{})
+				t.fail(line, []string{})
+			}
+			unexpectedCount++
+		}
+		if unexpectedCount > 10 {
+			t.fail("(truncated ${unexpectedCount - 10} more...)", []string{})
+		}
 
+		for _, err := range difference(t.expectedErrors, foundErrors) {
+			t.fail(fmt.Sprintf("Missing expected error %s", err), []string{})
+		}
+	}
+}
+
+func difference(a, b []string) []string {
+	mb := make(map[string]struct{}, len(b))
+	for _, x := range b {
+		mb[x] = struct{}{}
+	}
+	var diff []string
+	for _, x := range a {
+		if _, found := mb[x]; !found {
+			diff = append(diff, x)
+		}
+	}
+	return diff
 }

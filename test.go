@@ -18,6 +18,11 @@ func (e *TestParseError) Error() string {
 	return fmt.Sprintf("%s failed to parse", e.path)
 }
 
+type ExpectedOutput struct {
+	line   int
+	output string
+}
+
 type Test struct {
 	path                 string
 	expectedRuntimeError string
@@ -91,7 +96,7 @@ func (t *Test) fail(message string, lines []string) {
 	}
 }
 
-func (t *Test) parse() error {
+func (t *Test) parse(language string) error {
 	file, err := os.Open(t.path)
 	if err != nil {
 		panic(err)
@@ -139,8 +144,8 @@ func (t *Test) parse() error {
 
 		match = errorLinePattern.FindStringSubmatch(line)
 		if len(match) > 0 {
-			language := match[2]
-			if language == "" || language == suite.language {
+			errorLanguage := match[2]
+			if errorLanguage == "" || errorLanguage == language {
 				t.expectedErrors = append(t.expectedErrors, fmt.Sprintf("[%s] %s", match[3], match[4]))
 				t.expectedExitCode = compileErrorCode
 				t.expectations++

@@ -16,7 +16,8 @@ const compileErrorCode = 65
 const runtimeErrorCode = 70
 
 var suites = map[string]Suite{}
-var suite Suite
+
+// var suite Suite
 var passed = 0
 var failed = 0
 
@@ -78,22 +79,30 @@ func initSuites() {
 func runSuites(names []string) bool {
 	successful := true
 	for _, name := range names {
-		if !runSuite(name) {
+		suite := suites[name]
+		if !suite.run() {
 			successful = false
 		}
 	}
 	return successful
 }
 
-func runSuite(name string) bool {
-	log.Printf("====== Suite: %s ======", name)
+type Suite struct {
+	name       string
+	executable string
+	language   string
+	args       []string
+	tests      []string
+}
 
-	suite = suites[name]
+func (s *Suite) run() bool {
+	log.Printf("====== Suite: %s ======", s.name)
+
 	passed = 0
 	failed = 0
 
-	for _, test := range suite.tests {
-		runTest(test)
+	for _, test := range s.tests {
+		s.runTest(test)
 	}
 	isSuccessful := failed == 0
 	if isSuccessful {
@@ -105,7 +114,7 @@ func runSuite(name string) bool {
 	return isSuccessful
 }
 
-func runTest(path string) {
+func (s *Suite) runTest(path string) {
 	if strings.Contains(path, "benchmark") {
 		return
 	}
@@ -116,12 +125,12 @@ func runTest(path string) {
 
 	log.Printf("Running test: %s", path)
 
-	err := test.parse()
+	err := test.parse(s.language)
 	if err != nil {
 		log.Panicln(err)
 	}
 
-	lox := exec.Command(suite.executable, "-jar", "C:\\Users\\willi\\Code\\lox\\out\\artifacts\\lox_jar\\lox.jar", test.path)
+	lox := exec.Command(s.executable, "-jar", "C:\\Users\\willi\\Code\\lox\\out\\artifacts\\lox_jar\\lox.jar", test.path)
 	failures := test.run(lox)
 	if len(failures) == 0 {
 		passed++
@@ -133,17 +142,4 @@ func runTest(path string) {
 		}
 		log.Println()
 	}
-}
-
-type Suite struct {
-	name       string
-	executable string
-	language   string
-	args       []string
-	tests      []string
-}
-
-type ExpectedOutput struct {
-	line   int
-	output string
 }

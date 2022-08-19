@@ -68,6 +68,7 @@ func initSuites() {
 				name:       "java - " + directory.Name(),
 				executable: javaInterpreter,
 				tests:      tests,
+				language:   "java",
 			}
 			suites[javaSuite.name] = javaSuite
 		}
@@ -142,6 +143,7 @@ func runTest(path string) {
 type Suite struct {
 	name       string
 	executable string
+	language   string
 	args       []string
 	tests      []string
 }
@@ -269,6 +271,7 @@ func (t *Test) parse() error {
 			}
 			t.expectedOutput = append(t.expectedOutput, expectedOutput)
 			t.expectations++
+			lineNum++
 			continue
 		}
 
@@ -280,7 +283,19 @@ func (t *Test) parse() error {
 
 			t.expectedExitCode = 65
 			t.expectations++
+			lineNum++
 			continue
+		}
+
+		errorLinePattern := regexp.MustCompile("// \\[((java|c) )?line (\\d+)\\] (Error.*)")
+		match = errorLinePattern.FindStringSubmatch(line)
+		if len(match) > 0 {
+			language := match[2]
+			if language == "" || language == suite.language {
+				t.expectedErrors = append(t.expectedErrors, fmt.Sprintf("[%s] %s", match[3], match[4]))
+				t.expectedExitCode = 65
+				t.expectations++
+			}
 		}
 
 		expectedRuntimeErrorPattern := regexp.MustCompile("// expect runtime error: (.+)")
@@ -325,6 +340,10 @@ func (t *Test) validateRuntimeError(lines []string) {
 		return
 	}
 
+	if lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
 	if lines[0] != t.expectedRuntimeError {
 		t.fail(fmt.Sprintf("Expected runtime error %s and got:", t.expectedRuntimeError), []string{})
 		t.fail(lines[0], []string{})
@@ -335,6 +354,7 @@ func (t *Test) validateRuntimeError(lines []string) {
 
 	var foundStackTrace = false
 	for _, line := range stackLines {
+		line = strings.TrimSuffix(line, "\r")
 		match := stackTracePattern.MatchString(line)
 		if match {
 			foundStackTrace = true
@@ -349,21 +369,27 @@ func (t *Test) validateRuntimeError(lines []string) {
 }
 
 func (t *Test) validateCompileErrors(lines []string) {
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
 	foundErrors := []string{}
 	unexpectedCount := 0
-	syntaxErrorPattern := regexp.MustCompile("[.*line (d+)] (Error.+)")
+	syntaxErrorPattern := regexp.MustCompile("\\[.*line (\\d+)\\] (Error.+)")
 	for _, line := range lines {
+		line = strings.TrimSuffix(line, "\r")
 		match := syntaxErrorPattern.FindStringSubmatch(line)
+		syntaxErrorPattern.MatchString(line)
 		if len(match) > 0 {
-			error := fmt.Sprintf("[%s] %s", match[1], match[2])
+			err := fmt.Sprintf("[%s] %s", match[1], match[2])
 			containsError := false
 			for _, expectedError := range t.expectedErrors {
-				if expectedError == error {
+				if expectedError == err {
 					containsError = true
 				}
 			}
 			if containsError {
-				foundErrors = append(foundErrors, error)
+				foundErrors = append(foundErrors, err)
 			} else {
 				if unexpectedCount < 10 {
 					t.fail("Unexpected output on std err", []string{})
@@ -381,10 +407,10 @@ func (t *Test) validateCompileErrors(lines []string) {
 		if unexpectedCount > 10 {
 			t.fail("(truncated ${unexpectedCount - 10} more...)", []string{})
 		}
+	}
 
-		for _, err := range difference(t.expectedErrors, foundErrors) {
-			t.fail(fmt.Sprintf("Missing expected error %s", err), []string{})
-		}
+	for _, err := range difference(t.expectedErrors, foundErrors) {
+		t.fail(fmt.Sprintf("Missing expected error %s", err), []string{})
 	}
 }
 

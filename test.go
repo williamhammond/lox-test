@@ -244,7 +244,7 @@ func (t *Test) validateCompileErrors(lines []string) {
 			} else {
 				if unexpectedCount < 10 {
 					t.fail("Unexpected output on std err", []string{})
-					t.fail(line, []string{})
+					t.fail(err, []string{})
 				}
 				unexpectedCount++
 			}

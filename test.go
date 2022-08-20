@@ -183,7 +183,7 @@ func (t *Test) validateExitCode(exitCode int, lines []string) {
 		lines = append(lines, "(truncated...)")
 	}
 
-	t.fail("Expected return code $_expectedExitCode and got $exitCode. Stderr:", lines)
+	t.fail(fmt.Sprintf("Expected return code %d and got %d. Stderr:", t.expectedExitCode, exitCode), lines)
 
 }
 

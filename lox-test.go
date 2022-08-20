@@ -56,13 +56,15 @@ func initSuites() {
 			for _, testFile := range testFiles {
 				tests = append(tests, "tests/"+directory.Name()+"/"+testFile.Name())
 			}
-			var javaSuite = Suite{
-				name:       "java - " + directory.Name(),
-				executable: javaInterpreter,
-				tests:      tests,
-				language:   "java",
+			if directory.Name() != "limit" {
+				var javaSuite = Suite{
+					name:       "java - " + directory.Name(),
+					executable: javaInterpreter,
+					tests:      tests,
+					language:   "java",
+				}
+				suites[javaSuite.name] = javaSuite
 			}
-			suites[javaSuite.name] = javaSuite
 		}
 	}
 }

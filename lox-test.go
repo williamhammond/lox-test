@@ -27,13 +27,13 @@ func main() {
 		log.Panicln(err)
 	}
 
-	keys := make([]string, len(suites))
+	suiteNames := make([]string, len(suites))
 	i := 0
 	for k := range suites {
-		keys[i] = k
+		suiteNames[i] = k
 		i++
 	}
-	result := runSuites(keys)
+	result := runSuites(suiteNames)
 	if !result {
 		os.Exit(1)
 	}
@@ -65,12 +65,6 @@ func initSuites() {
 			suites[javaSuite.name] = javaSuite
 		}
 	}
-
-	//var cSuite = Suite{
-	//	executable: cInterpreter,
-	//	tests:      tests,
-	//}
-	//suites["c"] = cSuite
 }
 
 func runSuites(names []string) bool {

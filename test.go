@@ -53,11 +53,11 @@ func (t *Test) run(lox *exec.Cmd) []string {
 		}
 	}
 
-	stdoutSring := strings.ReplaceAll(string(stdout.Bytes()), "\r", "")
-	outputLines := strings.Split(stdoutSring, "\n")
+	stdoutString := strings.ReplaceAll(string(stdout.Bytes()), "\r", "")
+	outputLines := strings.Split(stdoutString, "\n")
 
-	stderrSring := strings.ReplaceAll(string(stderr.Bytes()), "\r", "")
-	errorLines := strings.Split(stderrSring, "\n")
+	stderrString := strings.ReplaceAll(string(stderr.Bytes()), "\r", "")
+	errorLines := strings.Split(stderrString, "\n")
 
 	if t.expectedRuntimeError != "" {
 		t.validateRuntimeError(errorLines)

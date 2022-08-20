@@ -1,6 +1,10 @@
 package main
 
-import "log"
+import (
+	"log"
+	"os/exec"
+	"strings"
+)
 
 type Suite struct {
 	name       string
